@@ -14,7 +14,8 @@ options:
   -s, --snapshots-dir DIR   where CMD writes PNGs
       --base-command CMD    command for the base ref (default: --command)
   -b, --base-ref REF        branch, tag or SHA to compare against
-                            (default: $GITHUB_BASE_REF, else master)
+                            (default: on pull_request events, the first parent
+                            of the merge commit; else $GITHUB_BASE_REF; else master)
       --remote NAME         remote to fetch the base ref from (default: origin)
       --no-fetch            resolve the base ref locally without fetching
   -C, --cwd DIR             directory to run in (default: .)

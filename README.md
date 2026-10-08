@@ -46,6 +46,8 @@ npx -p github:graphl-tech/image-dir-diff-action image-dir-diff-run ...
 
 `image-dir-diff-run` fetches the base ref from `origin`
 (pass `--no-fetch` to use your local ref).
+On `pull_request` events the default base ref is the first parent of
+GitHub's merge commit, i.e. exactly what the PR is being merged onto.
 `--command` and `--snapshots-dir` are relative to `--cwd`,
 and the same subdirectory is used inside the base worktree.
 If the command fails on the current checkout, the run aborts.

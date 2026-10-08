@@ -15,7 +15,9 @@ inputs:
     description: Command to run on the base ref instead of `command`.
     default: ""
   base-ref:
-    description: Branch, tag or SHA to compare against. Defaults to the PR's base branch, else master.
+    description: >
+      Branch, tag or SHA to compare against. Defaults to the commit the PR is being merged onto
+      (the first parent of the merge commit), else master.
     default: ""
   working-directory:
     description: Directory (inside the repo) to run the commands in. Mirrored inside the base checkout.
@@ -23,6 +25,9 @@ inputs:
   output:
     description: Report directory, relative to working-directory.
     default: snapshot-diff
+  skip-head:
+    description: Don't run `command` on this commit; diff the snapshots already in snapshots-dir (e.g. from an earlier test step).
+    default: "false"
   clean:
     description: Delete snapshots-dir before running the command on this commit.
     default: "false"
@@ -103,6 +108,7 @@ runs:
         INPUT_BASE_COMMAND: ${{ inputs.base-command }}
         INPUT_BASE_REF: ${{ inputs.base-ref }}
         INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_SKIP_HEAD: ${{ inputs.skip-head }}
         INPUT_CLEAN: ${{ inputs.clean }}
         INPUT_PIXEL_THRESHOLD: ${{ inputs.pixel-threshold }}
         INPUT_IMAGE_THRESHOLD: ${{ inputs.image-threshold }}
@@ -126,6 +132,7 @@ runs:
         [ -n "$INPUT_BASE_COMMAND" ] && args+=(--base-command "$INPUT_BASE_COMMAND")
         [ -n "$INPUT_BASE_REF" ] && args+=(--base-ref "$INPUT_BASE_REF")
         [ -n "$INPUT_ARTIFACTS_REPO" ] && args+=(--artifacts-repo "$INPUT_ARTIFACTS_REPO")
+        [ "$INPUT_SKIP_HEAD" = "true" ] && args+=(--skip-head)
         [ "$INPUT_CLEAN" = "true" ] && args+=(--clean)
         [ "$INPUT_COMMENT" = "true" ] && args+=(--comment)
         [ "$INPUT_FAIL_ON_DIFF" = "true" ] && args+=(--fail-on-diff)

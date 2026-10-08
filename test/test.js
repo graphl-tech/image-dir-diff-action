@@ -125,3 +125,48 @@ test("run diffs a subdirectory's snapshots against a base ref", async () => {
 function require_pngjs() {
   return path.dirname(fileURLToPath(import.meta.resolve("pngjs/package.json")));
 }
+
+test("on pull_request, run diffs against the merge commit's first parent, even in a shallow clone", async () => {
+  const origin = tmpdir();
+  const g = (cwd, ...args) =>
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe" }).toString().trim();
+  g(origin, "init", "-q", "-b", "master");
+  const gen = `node -e 'require("fs").mkdirSync("snaps",{recursive:true});for(const n of require("fs").readFileSync("names","utf8").split(" "))require("fs").copyFileSync("px.png","snaps/"+n.trim()+".png")'`;
+  writePng(path.join(origin, "px.png"), 1, 1, solid([0, 0, 0, 255]));
+  fs.writeFileSync(path.join(origin, ".gitignore"), "snaps\nsnapshot-diff\n");
+  fs.writeFileSync(path.join(origin, "names"), "a");
+  g(origin, "add", "-A");
+  g(origin, "commit", "-qm", "base");
+  const base = g(origin, "rev-parse", "HEAD");
+  g(origin, "checkout", "-qb", "pr");
+  fs.writeFileSync(path.join(origin, "names"), "a b");
+  g(origin, "commit", "-qam", "pr");
+  // master moves on after the PR was opened; it must not be compared against
+  g(origin, "checkout", "-q", "master");
+  fs.writeFileSync(path.join(origin, "unrelated"), "");
+  g(origin, "add", "-A");
+  g(origin, "commit", "-qm", "later");
+  // GitHub's merge commit for the PR, onto the original base
+  g(origin, "checkout", "-q", "--detach", base);
+  g(origin, "merge", "-q", "--no-ff", "-m", "merge", "pr");
+  const merge = g(origin, "rev-parse", "HEAD");
+  g(origin, "update-ref", "refs/pull/1/merge", merge);
+  g(origin, "checkout", "-q", "master");
+
+  const clone = tmpdir();
+  g(clone, "init", "-q");
+  g(clone, "remote", "add", "origin", `file://${origin}`);
+  g(clone, "fetch", "-q", "--depth=1", "origin", "refs/pull/1/merge");
+  g(clone, "checkout", "-q", "--detach", "FETCH_HEAD");
+
+  const env = { ...process.env };
+  process.env.GITHUB_EVENT_NAME = "pull_request";
+  process.env.GITHUB_BASE_REF = "master";
+  try {
+    const { manifest, baseSha } = await run({ command: gen, snapshotsDir: "snaps", cwd: clone });
+    assert.equal(baseSha, base);
+    assert.deepEqual(manifest.added, ["b.png"]);
+  } finally {
+    process.env = env;
+  }
+});

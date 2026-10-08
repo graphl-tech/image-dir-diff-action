@@ -3,7 +3,8 @@
  * them. This is the whole GitHub Action; it also runs fine locally.
  *
  *   1. run `command` in `cwd` and copy `snapshotsDir` aside ("after")
- *   2. resolve `baseRef` (fetching it from `remote` first)
+ *   2. resolve `baseRef` (fetching it from `remote` first); by default on
+ *      pull_request events that's the first parent of GitHub's merge commit
  *   3. take the base snapshots from the artifacts repo cache if present,
  *      otherwise check the base out in a temporary worktree and run
  *      `baseCommand` there ("before")
@@ -48,7 +49,27 @@ function sh(command, cwd) {
   });
 }
 
+/**
+ * The ref to compare against when none is given. On pull_request events HEAD
+ * is GitHub's merge commit, whose first parent is the exact base the PR was
+ * merged onto; unlike the tip of the base branch, it can't move during the
+ * run (e.g. when the PR itself gets merged).
+ */
+function defaultBaseRef(repoRoot, env = process.env) {
+  if (env.GITHUB_EVENT_NAME === "pull_request") {
+    // read the raw commit: in a shallow clone, git hides HEAD's parents
+    const commit = tryGit(["cat-file", "commit", "HEAD"], repoRoot) ?? "";
+    const parents = [...commit.matchAll(/^parent ([0-9a-f]+)$/gm)].map((m) => m[1]);
+    if (parents.length === 2) return parents[0];
+  }
+  return env.GITHUB_BASE_REF || "master";
+}
+
 function resolveBase({ repoRoot, baseRef, remote, fetch }) {
+  // a commit we already have needs no fetch
+  if (/^[0-9a-f]{40}$/.test(baseRef) && tryGit(["cat-file", "-e", `${baseRef}^{commit}`], repoRoot) !== null) {
+    return baseRef;
+  }
   if (fetch) {
     const shallow = tryGit(["rev-parse", "--is-shallow-repository"], repoRoot) === "true";
     const args = ["fetch", "--no-tags", "--no-recurse-submodules", ...(shallow ? ["--depth=1"] : []), remote, baseRef];
@@ -91,7 +112,8 @@ async function isReplaceableOutput(dir) {
  * @param {string} opts.command shell command that generates the snapshots
  * @param {string} opts.snapshotsDir where `command` writes PNGs, relative to `cwd`
  * @param {string} [opts.baseCommand] command to run on the base ref (default: `command`)
- * @param {string} [opts.baseRef] branch, tag or SHA to compare against
+ * @param {string} [opts.baseRef] branch, tag or SHA to compare against (default:
+ *   the merge commit's first parent on pull_request events, else $GITHUB_BASE_REF, else master)
  * @param {string} [opts.remote]
  * @param {boolean} [opts.fetch] fetch `baseRef` from `remote` before resolving it
  * @param {string} [opts.cwd] where to run the commands; mirrored inside the base worktree
@@ -112,7 +134,7 @@ export async function run({
   command,
   snapshotsDir,
   baseCommand = command,
-  baseRef = process.env.GITHUB_BASE_REF || "master",
+  baseRef,
   remote = "origin",
   fetch = true,
   cwd = process.cwd(),
@@ -176,6 +198,7 @@ export async function run({
     }
 
     // 2. base ref
+    baseRef ||= defaultBaseRef(repoRoot);
     const baseSha = resolveBase({ repoRoot, baseRef, remote, fetch });
     log(`base: ${baseRef} (${baseSha.slice(0, 10)})`);
 
