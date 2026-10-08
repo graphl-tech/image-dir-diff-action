@@ -1,0 +1,30 @@
+{
+  "name": "image-dir-diff",
+  "version": "0.1.0",
+  "description": "Diff two directories of PNG snapshots, and diff a repo's generated snapshots against another git ref",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/graphl-tech/image-dir-diff-action.git"
+  },
+  "bin": {
+    "image-dir-diff": "bin/image-dir-diff.js",
+    "image-dir-diff-run": "bin/image-dir-diff-run.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test test/*.js"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  }
+}

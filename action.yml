@@ -1,0 +1,141 @@
+name: image-dir-diff
+description: Generate image snapshots on this commit and on a base ref, diff them, and report the changes on the PR
+branding:
+  icon: image
+  color: purple
+
+inputs:
+  command:
+    description: Shell command that generates the snapshots. Runs in working-directory, on this commit and on the base ref.
+    required: true
+  snapshots-dir:
+    description: Directory the command writes PNGs into, relative to working-directory.
+    required: true
+  base-command:
+    description: Command to run on the base ref instead of `command`.
+    default: ""
+  base-ref:
+    description: Branch, tag or SHA to compare against. Defaults to the PR's base branch, else master.
+    default: ""
+  working-directory:
+    description: Directory (inside the repo) to run the commands in. Mirrored inside the base checkout.
+    default: "."
+  output:
+    description: Report directory, relative to working-directory.
+    default: snapshot-diff
+  clean:
+    description: Delete snapshots-dir before running the command on this commit.
+    default: "false"
+  pixel-threshold:
+    description: Max per-channel difference (0-1) for a pixel to count as unchanged.
+    default: "0.01"
+  image-threshold:
+    description: Max fraction of changed pixels for an image to count as unchanged.
+    default: "0.01"
+  fail-on-diff:
+    description: Fail the step if any snapshot changed, was added or was removed.
+    default: "false"
+  comment:
+    description: Post (or update) a summary comment on pull requests. Needs `pull-requests: write`.
+    default: "true"
+  comment-title:
+    description: Heading of the PR comment.
+    default: Snapshot diff
+  github-token:
+    description: Token used to comment on the PR.
+    default: ${{ github.token }}
+  artifacts-repo:
+    description: >
+      Optional owner/name of a GitHub repo to publish each report to (as branch `<sha>_snapshots`).
+      Enables before/after/diff images inline in the PR comment, and reuses published snapshots
+      instead of rebuilding the base ref when they exist.
+    default: ""
+  artifacts-token:
+    description: Token with push access to artifacts-repo.
+    default: ""
+  upload-artifact:
+    description: Upload the report directory as a workflow artifact.
+    default: "true"
+  artifact-name:
+    description: Name of the uploaded workflow artifact.
+    default: snapshot-diff
+
+outputs:
+  output-dir:
+    description: Absolute path of the report directory.
+    value: ${{ steps.run.outputs.output-dir }}
+  changed:
+    description: Number of changed snapshots.
+    value: ${{ steps.run.outputs.changed }}
+  added:
+    description: Number of added snapshots.
+    value: ${{ steps.run.outputs.added }}
+  removed:
+    description: Number of removed snapshots.
+    value: ${{ steps.run.outputs.removed }}
+  total:
+    description: changed + added + removed.
+    value: ${{ steps.run.outputs.total }}
+  base-sha:
+    description: The commit the snapshots were compared against.
+    value: ${{ steps.run.outputs.base-sha }}
+  branch:
+    description: Branch of artifacts-repo the report was published to, if any.
+    value: ${{ steps.run.outputs.branch }}
+  comment-url:
+    description: URL of the PR comment, if one was posted.
+    value: ${{ steps.run.outputs.comment-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install image-dir-diff
+      shell: bash
+      run: cd "$GITHUB_ACTION_PATH" && npm ci --omit=dev --no-audit --no-fund --loglevel=error
+
+    - name: Diff snapshots
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_SNAPSHOTS_DIR: ${{ inputs.snapshots-dir }}
+        INPUT_BASE_COMMAND: ${{ inputs.base-command }}
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_CLEAN: ${{ inputs.clean }}
+        INPUT_PIXEL_THRESHOLD: ${{ inputs.pixel-threshold }}
+        INPUT_IMAGE_THRESHOLD: ${{ inputs.image-threshold }}
+        INPUT_FAIL_ON_DIFF: ${{ inputs.fail-on-diff }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_COMMENT_TITLE: ${{ inputs.comment-title }}
+        INPUT_ARTIFACTS_REPO: ${{ inputs.artifacts-repo }}
+        INPUT_UPLOAD_ARTIFACT: ${{ inputs.upload-artifact }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        IMAGE_DIR_DIFF_ARTIFACTS_TOKEN: ${{ inputs.artifacts-token }}
+      run: |
+        args=(
+          --command "$INPUT_COMMAND"
+          --snapshots-dir "$INPUT_SNAPSHOTS_DIR"
+          --output "$INPUT_OUTPUT"
+          --pixel-threshold "$INPUT_PIXEL_THRESHOLD"
+          --image-threshold "$INPUT_IMAGE_THRESHOLD"
+          --comment-title "$INPUT_COMMENT_TITLE"
+        )
+        [ -n "$INPUT_BASE_COMMAND" ] && args+=(--base-command "$INPUT_BASE_COMMAND")
+        [ -n "$INPUT_BASE_REF" ] && args+=(--base-ref "$INPUT_BASE_REF")
+        [ -n "$INPUT_ARTIFACTS_REPO" ] && args+=(--artifacts-repo "$INPUT_ARTIFACTS_REPO")
+        [ "$INPUT_CLEAN" = "true" ] && args+=(--clean)
+        [ "$INPUT_COMMENT" = "true" ] && args+=(--comment)
+        [ "$INPUT_FAIL_ON_DIFF" = "true" ] && args+=(--fail-on-diff)
+        # only link to the workflow artifact from the comment if it's uploaded
+        [ "$INPUT_UPLOAD_ARTIFACT" = "true" ] && args+=(--artifact-name "$INPUT_ARTIFACT_NAME")
+        node "$GITHUB_ACTION_PATH/bin/image-dir-diff-run.js" "${args[@]}"
+
+    - name: Upload report
+      if: always() && inputs.upload-artifact == 'true' && steps.run.outputs.output-dir != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.run.outputs.output-dir }}
