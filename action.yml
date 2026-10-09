@@ -41,7 +41,7 @@ inputs:
     description: Fail the step if any snapshot changed, was added or was removed.
     default: "false"
   comment:
-    description: Post (or update) a summary comment on pull requests. Needs `pull-requests: write`.
+    description: "Post (or update) a summary comment on pull requests. Needs `pull-requests: write`."
     default: "true"
   comment-title:
     description: Heading of the PR comment.

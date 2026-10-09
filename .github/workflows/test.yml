@@ -13,5 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Validate action.yml
+        run: python3 -c "import yaml; yaml.safe_load(open('action.yml'))"
       - run: npm ci
       - run: npm test
