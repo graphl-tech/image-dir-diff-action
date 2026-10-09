@@ -98,11 +98,11 @@ runs:
       shell: bash
       run: |
         cd "$GITHUB_ACTION_PATH"
-        # bun.lock is the lockfile; fall back to npm on runners without bun
+        # use bun if the runner has it, otherwise npm; both have a lockfile
         if command -v bun >/dev/null; then
           bun install --frozen-lockfile --production
         else
-          npm install --omit=dev --no-save --no-package-lock --no-audit --no-fund --loglevel=error
+          npm ci --omit=dev --no-audit --no-fund --loglevel=error
         fi
 
     - name: Diff snapshots
