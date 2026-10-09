@@ -96,7 +96,14 @@ runs:
   steps:
     - name: Install image-dir-diff
       shell: bash
-      run: cd "$GITHUB_ACTION_PATH" && npm ci --omit=dev --no-audit --no-fund --loglevel=error
+      run: |
+        cd "$GITHUB_ACTION_PATH"
+        # bun.lock is the lockfile; fall back to npm on runners without bun
+        if command -v bun >/dev/null; then
+          bun install --frozen-lockfile --production
+        else
+          npm install --omit=dev --no-save --no-package-lock --no-audit --no-fund --loglevel=error
+        fi
 
     - name: Diff snapshots
       id: run
